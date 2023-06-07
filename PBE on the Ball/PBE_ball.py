@@ -11,7 +11,18 @@ import csv
 import cvxpy as cp
 
 
-def hom(W, filename='Test', name='w1', epoch=1):
+def norm(W):
+    """
+    takes a weight matrix W and normalizes the rows
+    """
+    if torch.is_tensor(W):
+        W = W.detach().numpy()
+    norm = np.linalg.norm(W, axis=1)
+    W_norm = W / norm[:, None]
+    return W_norm, norm
+
+
+def hom(W, filename='Test'):
     """
     takes a weight matrix W and saves it in homogemeous coordiantes, ready to be used by Polymake
     """
@@ -21,7 +32,7 @@ def hom(W, filename='Test', name='w1', epoch=1):
     h = np.ones((W.shape[0], 1))
     W_hom = np.concatenate((h, W), axis=1)
     mat = np.matrix(W_hom)
-    with open(filename + '/' + name + '_ep' + str(epoch) + '.txt', 'wb') as f:
+    with open(filename + '.txt', 'wb') as f:
         for line in mat:
             np.savetxt(f, line, fmt='%.2f')
     return
@@ -40,17 +51,16 @@ def is_omnidir(W):
     WW = np.concatenate([WT, [np.ones(m)]])
     ones = np.ones(m)
     zeros = np.concatenate([np.zeros(n), [1]])
-    res = linprog(ones, W_eq=WW, b_eq=zeros)
+    res = linprog(ones, A_eq=WW, b_eq=zeros)
 
     if res['message'] == 'The algorithm terminated successfully and determined that the problem is infeasible.':
-        ans = False
+        return False
     elif res['message'] == 'Optimization terminated successfully.':
         if np.any(res['x'] < 1e-10) == True:
             print('0 lies at or very very close to the boundary of the polytope.')
-            ans = True
+            return True
         else:
-            ans = True
-    return ans
+            return True
 
 
 def alpha_S(F):
@@ -72,7 +82,7 @@ def alpha_S(F):
     return min(sol)
  
 
-def pbe_ball(W, filename="facets.csv", radius=1):
+def pbe(W, filename="facets.csv", radius=1):
     """
     PBE: takes a weight matrix W, the vertex-facets incidences by Polymake and a radius and computes radius**-1 * alpha^B 
     """
