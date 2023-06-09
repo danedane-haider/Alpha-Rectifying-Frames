@@ -1,7 +1,13 @@
 #!/usr/bin/perl
 
+# This perl script computes the vertex-facet incidences of the convex polytope given by its
+# vertices (row vectors of a matrix in .txt format) and saves them in a *_facets.csv file.
+
 # Load the necessary polymake modules
 use application "polytope";
+
+# set the prefered backend using 'reverse search'
+prefer_now "lrs";
 
 # get the variable
 my $file = shift @ARGV;

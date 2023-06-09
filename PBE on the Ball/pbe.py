@@ -1,3 +1,12 @@
+# This file contains all functions to compute the PBE on the ball for a matrix W and do facet-specific reconstruction:
+# - row-wise normalization
+# - export in homogemeous coordinates
+# - check for omnidirectionality
+# - compute alpha^S via convex optimization
+# - read Polymake output
+# - PBE
+# - facet-specific reconstruction 
+
 import torch
 import numpy as np
 import cvxpy as cp
