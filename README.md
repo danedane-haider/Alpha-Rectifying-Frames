@@ -1,4 +1,5 @@
-# Alpha-rectifying frames
+# \centering Alpha-rectifying Frames:
+# Injecetivity and Local Reconstruction of ReLU-layers
 
 This repository contains routines related to $\alpha$-rectifying frames and ReLU-layers, including
 
