@@ -1,17 +1,11 @@
 import torch
 import numpy as np
-import pandas as pd
-import matplotlib
-import matplotlib.pyplot as plt
-import os
-import scipy
-import scipy.io as sio
+import cvxpy as cp
 from scipy.optimize import linprog
 import csv
-import cvxpy as cp
 
 
-def norm(W):
+def norm_row(W):
     """
     takes a weight matrix W and normalizes the rows
     """
@@ -104,8 +98,7 @@ def pbe(W, filename="facets.csv", radius=1):
         W = W.detach().numpy()
     if is_omnidir(W) == False:
         return 'The frame is not omnidirectional'
-    norm = np.linalg.norm(W, axis=1)
-    W_norm = W / norm[:, None]
+    W_norm, norm = norm_row(W)
 
     m, n = W.shape
 
