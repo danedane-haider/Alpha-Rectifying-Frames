@@ -31,9 +31,10 @@ def hom(W, filename='Test'):
             np.savetxt(f, line, fmt='%.2f')
     return
 
+
 def is_omnidir(W):
     """
-    takes a weight matrix A and checks for omnidirectionality, binary output
+    takes a weight matrix W and checks for omnidirectionality, binary output
     """
     if torch.is_tensor(W):
         W = W.detach().numpy()
@@ -59,7 +60,7 @@ def is_omnidir(W):
 
 def alpha_S(F):
     """
-    computes alpha^S for one facet F (given by its vertices)
+    computes alpha^S for one facet F
     """
     if torch.is_tensor(F):
         F = F.detach().numpy()
@@ -76,23 +77,22 @@ def alpha_S(F):
     return min(sol)
  
 
+def read_facets(filename="facets.csv"):
+    """
+    reads the vertex-facets incidences as .csv file from Polymake and writes them into an array
+    """
+    with open(filename, "r") as file:
+        csv_reader = csv.reader(file)
+        facets = [[int(num) for num in row[0][1:-1].split()] for row in csv_reader]
+    return facets
+
+
 def pbe(W, filename="facets.csv", radius=1):
     """
-    PBE: takes a weight matrix W, the vertex-facets incidences by Polymake and a radius and computes radius**-1 * alpha^B 
+    PBE: takes a weight matrix W, the vertex-facets incidence .csv file from Polymake and a radius
+    output: radius**-1 * alpha^B 
     """
-    file = open(filename, "r")
-    csv_reader = csv.reader(file)
-
-    facets = []
-    for row in csv_reader:
-        facets.append(row)
-
-    num_f = len(facets)
-    for i in range(0, num_f):
-        facets[i][0] = facets[i][0][1:-1]
-        facets[i] = facets[i][0].split()
-        for j in range(0, len(facets[i])):
-            facets[i][j] = int(facets[i][j])
+    facets = read_facets(filename)
 
     if torch.is_tensor(W):
         W = W.detach().numpy()
@@ -128,5 +128,34 @@ def pbe(W, filename="facets.csv", radius=1):
         alpha_norm.append(min(gam))
 
     alpha = np.multiply(alpha_norm, np.reciprocal(norm.T))*radius**(-1)
-
     return alpha
+
+
+def relu(x, W, b):
+    """
+    computes the forward pass of a ReLU-layer (convention here: negative bias)
+    """
+    z = np.dot(W, x) - b
+    return z * (z > 0)
+
+
+def relu_inv(z, W, b, filename="facets.csv", mode='facet'):
+    """
+    reconstructs x from z = ReLU(Wx - b) using a facet-specific left-inverse 
+    setting mode to something else will use the whole active sub-frame
+    """
+    facets = read_facets(filename)
+    I = np.where(z > 0)[0]
+    if mode == 'facet':
+        for i in range(0, len(facets)):
+            if all(k in I for k in facets[i]):
+                break
+        f_ind = facets[i]
+        print('Facet', i, 'with vertices', f_ind, 'is used for reconstruction.')
+    else:
+        f_ind = I
+    W_f = W[f_ind,:]
+    b_f = b[f_ind]
+    z_f = z[f_ind]
+    x = np.linalg.lstsq(W_f, z_f + b_f, rcond=None)[0] # equivalent to synthesis with the canonical dual frame
+    return x
