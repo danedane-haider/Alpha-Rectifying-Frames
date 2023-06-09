@@ -6,4 +6,4 @@ This repository contains routines related to $\alpha$-rectifying frames and the 
   _given a collection of vectors (e.g. row vectors of a weight matrix), the PBE gives a bias vector_ $\alpha^\mathbb{B}$ _such that any ReLU-layer with bias_ $b\leq\alpha^\mathbb{B}$ _is injective on_ $\mathbb{B}$
 - **reconstruction formulas** for injective ReLU-layers
 
-The routines make use of the software Polymake to compute the facet-incidence matrix of a convex polytope on the sphere. Installing Polymake is flawless, see https://polymake.org/doku.php/download/start. 
+The routines make use of the software Polymake 4.6 to compute the facet-incidence matrix of a convex polytope on the sphere. Installing Polymake is flawless, see https://polymake.org/doku.php/download/start. 
