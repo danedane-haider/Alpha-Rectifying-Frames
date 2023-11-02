@@ -3,12 +3,12 @@ import scipy as sp
 
 def fb_ana(w, a=1):
     '''
-    This function returns the frame analysis matrix associated to a collection of filters with decimation factor stride.
+    This function returns the frame analysis matrix associated to a collection of filters with decimation factor a.
 
     Usage:
-            W = fb_ana(w)
+            W = fb_ana(w, a)
     Output:
-            The JN/a x N frame analysis matrix associated with w.
+            The JN/a x N frame analysis matrix associated with w and decimation factor a.
     '''
 
     N = w.shape[1]
@@ -18,12 +18,14 @@ def fb_ana(w, a=1):
     return np.array(W).reshape(J*N//a,N)
 
 
-def randn_fb(N, J, T=None, scale=True, analysis=True, a=1):
+def randn_fb(N, J, T=None, scale=True, norm=False, analysis=True, a=1):
     '''
     This function creates a random filterbank with J filters of support T, sampled form a normal distribution and padded with zeros to have length N.
+    If scale is set to True, the filters are divided by sqrt(J*T).
+    If norm is set to True, the filters are normalized.
     If analysis is set to True, the function returns the frame analysis matrix of the filterbank.
     If analysis is set to False, the function returns the filterbank itself.
-    The decimation factor a must be a divisor of N.
+    The decimation factor a determined the stride in the convolution and must be a divisor of N.
 
     Usage:
             W = random_filterbank(N, J)
@@ -37,6 +39,9 @@ def randn_fb(N, J, T=None, scale=True, analysis=True, a=1):
         T = N
     if scale:
         w = np.random.randn(J, T)/np.sqrt(T*J)
+    if norm:
+        norm = np.linalg.norm(w, axis=1)
+        w = w/norm[:,None]
     else:
         w = np.random.randn(J, T)
     w_pad = np.pad(w, ((0,0),(0, N-T)), constant_values=0)
