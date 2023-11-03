@@ -1,4 +1,5 @@
-# Alpha-rectifying Frames: Injectivity and Reconstruction of ReLU-layers
+Alpha-rectifying Frames:
+# Injectivity and Reconstruction of ReLU-layers
 
 This repository contains routines related to the injectivity of ReLU-layers and $\alpha$-rectifying frames, accompanying our ICML23 paper [Convex Geometry of ReLU-layers, Injectivity on the Ball and Local Reconstruction](http://arxiv.org/abs/2307.09672). It currently includes:
 
