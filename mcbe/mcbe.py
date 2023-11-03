@@ -1,12 +1,22 @@
-from scipy.spatial import ConvexHull, convex_hull_plot_2d
 import numpy as np
-import pbe
-from tqdm import tqdm
-import pandas as pd
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from random import randint
-from collections import Counter
+import torch
+
+def norm_row(W):
+    """
+    takes a weight matrix W and normalizes the rows
+    """
+    if torch.is_tensor(W):
+        W = W.detach().numpy()
+    norm = np.linalg.norm(W, axis=1)
+    W_norm = W / norm[:, None]
+    return W_norm, norm
+
+def relu(x, W, b):
+    """
+    computes the forward pass of a ReLU-layer (convention here: negative bias)
+    """
+    z = np.dot(W, x) - b
+    return z * (z > 0)
 
 def random_ball(num_points, dimension, radius=1):
     random_directions = np.random.normal(size=(dimension,num_points))
@@ -28,21 +38,38 @@ def random_point(num_points, dimension):
 
 def random_sphere(num_points, dimension, radius=1):
 
-    return radius*pbe.norm_row(np.random.randn(num_points, dimension))
+    return radius*norm_row(np.random.randn(num_points, dimension))
 
 
 def get_point(distribution, d, radius=1,radius_inner=0.1):
 
     if distribution == "sphere":
         return random_sphere(1, d, radius)[0][0]
-    if distribution == "normal":
+    elif distribution == "normal":
         return random_point(1, d)[0]
-    if distribution == "donut":
+    elif distribution == "donut":
         return random_donut(1, d, radius_outer=radius,radius_inner=radius_inner)[0]
-    if distribution == "ball":
+    elif distribution == "ball":
         return random_ball(1, d, radius)[0]
+    else:
+        raise ValueError("distribution not found")
 
-def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radius=1, radius_inner=0.1):
+
+def get_points(distribution, num_points, d, radius=1,radius_inner=0.1):
+
+    if distribution == "sphere":
+        return random_sphere(num_points, d, radius)[0]
+    elif distribution == "normal":
+        return random_point(num_points, d)
+    elif distribution == "donut":
+        return random_donut(num_points, d, radius_outer=radius,radius_inner=radius_inner)
+    elif distribution == "ball":
+        return random_ball(num_points, d, radius)
+    else:
+        raise ValueError("distribution not found")
+
+
+def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radius=1, radius_inner=0.1, give_subframes=False):
     '''
     Monte Carlo Sampling Approach for Bias Estimation
 
@@ -51,6 +78,7 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radi
     stops after iteration (k + thres range) if: mean(alpha_k) - mean(alpha_{k+thres_range}) <  thres
     radius.. if distribution is ball, donut or sphere
     radius_inner.. if distribution = donut
+    give_subframes.. if True: also returns subframes calculated for the points used for approximation
 
     Output:
     approximated bias; means of values of alpha across iterations
@@ -68,6 +96,7 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radi
     means_alpha = []
 
     iter = 0
+    subframes = []
 
     while iter <= thres_range:
 
@@ -75,6 +104,11 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radi
         point = get_point(distribution, d, radius,radius_inner)
 
         corr_x_vert = [np.dot(point, i) for i in polytope]
+
+        #find subframes
+        if give_subframes == True:
+            subframe = np.argsort(corr_x_vert)[-d:]
+            subframes.append(tuple(np.sort(subframe)))
 
         # find the d-nearest point of the polytope
         i = np.argsort(corr_x_vert)[-d]
@@ -96,6 +130,11 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radi
 
         corr_x_vert = [np.dot(point, i) for i in polytope]
 
+        # find subframes
+        if give_subframes == True:
+            subframe = np.argsort(corr_x_vert)[-d:]
+            subframes.append(tuple(np.sort(subframe)))
+
         # find the d-nearest point of the polytope
         i = np.argsort(corr_x_vert)[-d]
 
@@ -109,11 +148,13 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radi
 
     print("alpha converged after", iter, "iterations")
 
+    if give_subframes == True:
+        return alpha/np.linalg.norm(polytope,axis=1), means_alpha, set(subframes)
+    else:
+        return alpha/np.linalg.norm(polytope,axis=1), means_alpha
 
-    return alpha/np.linalg.norm(polytope,axis=1), means_alpha
 
-
-def check_injectivity(W, iter, distribution="sphere", thres_range = 500, thres = 0.001, radius=1, radius_inner=0.1):
+def check_injectivity(W, iter, distribution="sphere", thres_range = 500, thres = 0.001, radius=1, radius_inner=0.1, b=0):
     '''W.. parameter Matrix
     distribution, thres_range, thres, radius, radius_inner.. parameters for sample_method()
     iter.. number of injectivity tests run
@@ -124,13 +165,65 @@ def check_injectivity(W, iter, distribution="sphere", thres_range = 500, thres =
     num_vert = W.shape[0]
 
     for i in range(0, iter):
-        W = pbe.norm_row(np.random.randn(num_vert, d))[0]
+        W = norm_row(np.random.randn(num_vert, d))[0]
 
         x = get_point(distribution,d,radius,radius_inner)
 
         alpha, means_alpha = mcbe(W, distribution, thres_range, thres, radius, radius_inner)
-        bool_injective.append(np.sum(pbe.relu(x, W, alpha) != 0) >= d)
+        bool_injective.append(np.sum(relu(x, W, alpha) >= b) >= d)
 
     return np.mean(bool_injective)
+
+
+def injectivity_on_test_set(W, distribution, num_test_points, num_iter, radius=1, radius_inner=0.1):
+
+    """checks injectivity on test set random drawn from distribution for every trainings iteration
+    Usage:
+    W.. weight matrix
+    num_test_points.. number of points in test set
+    num_iter.. number of trainings iterations
+    distribution, radius, radius_inner.. parameter vor mcbe
+
+    Output:
+    percent of samples in the test set for which the relu layer with W and the estimated alpha is injective for every
+    iteration"""
+
+    d = W.shape[1]
+    num_vert = W.shape[0]
+
+    # initiate alpha as inf
+    alpha = np.zeros(num_vert)
+    alpha[:] = np.inf
+
+    means_alpha = []
+
+    test_points = get_points(distribution, num_test_points, d, radius, radius_inner)
+
+    inj = []
+
+    for it in range(num_iter):
+        # sample x
+        point = get_point(distribution, d, radius, radius_inner)
+
+        corr_x_vert = [np.dot(point, i) for i in W]
+
+        # find the d-nearest point of the polytope
+        i = np.argsort(corr_x_vert)[-d]
+
+        # if correlation is smaller than the i-th position in alpha overwrite it
+        alpha[i] = np.min([alpha[i], corr_x_vert[i]])
+
+        means_alpha.append(np.mean(alpha))
+
+        # check injectivity
+        inj_temp = []
+
+        if np.max(alpha) < np.inf:
+            for x in test_points:
+                inj_temp.append(np.sum(relu(x, W, alpha) != 0) >= d)
+
+            inj.append(np.mean(inj_temp))
+
+    return inj
 
 
