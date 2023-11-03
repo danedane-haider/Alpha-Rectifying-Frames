@@ -102,7 +102,14 @@ def pbe(W, facets, K='sphere', radius=1):
         neighbours = np.unique(np.array(facets)[[vert in facet for facet in facets]])
         corr_vec = W_norm[vert, :].dot(W_norm[neighbours, :].T)
         min_corr = np.min(corr_vec)
-        alpha_norm.append(np.min([min_corr,0]))
+        if min_corr < 0:
+            min_corr = alpha_S(W_norm[neighbours])
+        if K == 'sphere':
+            alpha_norm.append(min_corr)
+        elif K == 'ball':
+            alpha_norm.append(np.min([min_corr,0]))
+        else:
+            return 'Only sphere and ball are supported as data domains'
 
     return np.multiply(alpha_norm, np.reciprocal(norm.T)) * radius ** (-1)
 
