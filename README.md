@@ -1,9 +1,7 @@
 # Alpha-rectifying Frames: Injectivity and Reconstruction of ReLU-layers
 
-This repository contains routines related to $\alpha$-rectifying frames and the injectivity of ReLU-layers, accompanying our ICML23 paper [Convex Geometry of ReLU-layers, Injectivity on the Ball and Local Reconstruction](http://arxiv.org/abs/2307.09672). It currently includes:
+This repository contains routines related to the injectivity of ReLU-layers and $\alpha$-rectifying frames, accompanying our ICML23 paper [Convex Geometry of ReLU-layers, Injectivity on the Ball and Local Reconstruction](http://arxiv.org/abs/2307.09672). It currently includes:
 
-- **polytope bias estimations** (PBE) for different input data domains (currently only the ball $\mathbb{B}_r$):
-  _given a collection of vectors (e.g. row vectors of a weight matrix), the PBE gives a bias vector_ $\alpha^\mathbb{B}$ _such that any ReLU-layer with bias_ $b\leq\alpha^\mathbb{B}$ _is injective on_ $\mathbb{B}$
+- **polytope bias estimations** (PBE) for different input data domains:
+  _given a collection of vectors (e.g. row vectors of a weight matrix), the PBE gives a bias vector_ $\alpha^\mathbb{K}$ _such that any ReLU-layer with bias_ $b\leq\alpha^\mathbb{B}$ _is injective on_ $K$
 - **reconstruction formulas** for injective ReLU-layers
-
-The routines make use of the software Polymake 4.6 to compute the facet-incidence matrix of a convex polytope on the sphere. Installing Polymake is flawless, see https://polymake.org/doku.php/download/start. 
