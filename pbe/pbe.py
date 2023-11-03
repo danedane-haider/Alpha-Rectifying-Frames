@@ -1,9 +1,7 @@
-# This file contains all functions to compute the PBE on the ball for a matrix W and do facet-specific reconstruction:
+# This file contains all functions to compute the PBE on the scaled sphere, the closed ball for a matrix W and do facet-specific reconstruction:
 # - row-wise normalization
-# - export in homogemeous coordinates
 # - check for omnidirectionality
 # - compute alpha^S via convex optimization
-# - read Polymake output
 # - PBE
 # - facet-specific reconstruction 
 
@@ -25,22 +23,6 @@ def norm_row(W):
     norm = np.linalg.norm(W, axis=1)
     W_norm = W / norm[:, None]
     return W_norm, norm
-
-
-def hom(W, filename='Test'):
-    """
-    takes a weight matrix W and saves it in homogemeous coordiantes, ready to be used by Polymake
-    """
-    np.set_printoptions(precision=4, threshold=10_000, suppress=True)
-    if torch.is_tensor(W):
-        W = W.detach().numpy()
-    h = np.ones((W.shape[0], 1))
-    W_hom = np.concatenate((h, W), axis=1)
-    mat = np.matrix(W_hom)
-    with open(filename + '.txt', 'wb') as f:
-        for line in mat:
-            np.savetxt(f, line, fmt='%.2f')
-    return
 
 
 def is_omnidir(W):
@@ -68,6 +50,17 @@ def is_omnidir(W):
         else:
             return True
 
+def facets(W):
+    """
+    computes the facets of the normalized row vectors of the matrix W
+    use only with low dimensions!!!!
+    """
+    if torch.is_tensor(W):
+        W = W.detach().numpy()
+    hull = ConvexHull(W)
+    facets = hull.simplices
+
+    return list(list(facet) for facet in facets)
 
 def alpha_S(F):
     """
@@ -86,28 +79,15 @@ def alpha_S(F):
         result = prob.solve()
         sol.append(prob.value)
     return min(sol)
- 
-
-def read_facets(filename="facets.csv"):
-    """
-    reads the vertex-facets incidences as .csv file from Polymake and writes them into an array
-    """
-    with open(filename, "r") as file:
-        csv_reader = csv.reader(file)
-        facets = [[int(num) for num in row[0][1:-1].split()] for row in csv_reader]
-    return facets
 
 
+def pbe(W, facets, K='sphere', radius=1):
+    """
+    The Polytope Bias Estimation for approximating the maximal bias on K.
 
-def pbe(W, list_facets = [], filename="facets.csv", radius=1):
+    Input: a weight matrix W, the list of vertex-facet incidences, the data domain K as string ('sphere', 'ball') and a radius
+    Output: radius**-1 * alpha^K
     """
-    PBE: takes a weight matrix W, the vertex-facets incidence .csv file from Polymake and a radius
-    output: radius**-1 * alpha^B
-    """
-    if list_facets:
-        facets = list_facets
-    else:
-        facets = read_facets(filename)
 
     if torch.is_tensor(W):
         W = W.detach().numpy()
@@ -116,21 +96,15 @@ def pbe(W, list_facets = [], filename="facets.csv", radius=1):
     W_norm, norm = norm_row(W)
 
     m, n = W.shape
-
     alpha_norm = []
 
     for vert in range(0, m):
-
         neighbours = np.unique(np.array(facets)[[vert in facet for facet in facets]])
-
         corr_vec = W_norm[vert, :].dot(W_norm[neighbours, :].T)
-
         min_corr = np.min(corr_vec)
-
         alpha_norm.append(np.min([min_corr,0]))
 
-    alpha = np.multiply(alpha_norm, np.reciprocal(norm.T)) * radius ** (-1)
-    return alpha
+    return np.multiply(alpha_norm, np.reciprocal(norm.T)) * radius ** (-1)
 
 
 def relu(x, W, b):
@@ -141,16 +115,11 @@ def relu(x, W, b):
     return z * (z > 0)
 
 
-def relu_inv(z, W, b, list_facets = [], filename="facets.csv", mode='facet'):
+def relu_inv(z, W, b, facets, mode='facet'):
     """
     reconstructs x from z = ReLU(Wx - b) using a facet-specific left-inverse 
     setting mode to something else will use the whole active sub-frame
     """
-    if list_facets:
-        facets = list_facets
-    else:
-        facets = read_facets(filename)
-
     I = np.where(z > 0)[0]
     if mode == 'facet':
         for i in range(0, len(facets)):
@@ -215,18 +184,5 @@ def randn_fb(N, J, T=None, scale=True, norm=False, analysis=True, a=1):
         return fb_ana(w_pad, a=a)
 
     return w_pad
-
-class convex_hull_method:
-
-    def __init__(self, polytope):
-        self.polytope = polytope
-        self.d = polytope.shape[1]
-
-    def facets(self):
-        ##only use with low dimensions!!!!
-        hull = ConvexHull(self.polytope)
-        true_facets = hull.simplices
-
-        return list(list(facet) for facet in facets)
 
 
