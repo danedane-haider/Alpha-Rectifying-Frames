@@ -146,12 +146,12 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radi
         iter = iter + 1
         diff_thres = np.mean(means_alpha[-thres_range]) - np.mean(means_alpha[-1])
 
-    print("alpha converged after", iter, "iterations")
+    print("Bias estimation converged after", iter, "iterations")
 
     if give_subframes == True:
-        return alpha/np.linalg.norm(polytope,axis=1), means_alpha, set(subframes)
+        return alpha/np.linalg.norm(polytope,axis=1), set(subframes)
     else:
-        return alpha/np.linalg.norm(polytope,axis=1), means_alpha
+        return alpha/np.linalg.norm(polytope,axis=1),
 
 
 def check_injectivity(W, iter, distribution="sphere", thres_range = 500, thres = 0.001, radius=1, radius_inner=0.1, b=0):
