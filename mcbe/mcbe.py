@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from tqdm import tqdm
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 def norm_row(W):
     """
@@ -95,7 +97,7 @@ def get_points(distribution, num_points, d, radius=1,radius_inner=0.1):
         raise ValueError("distribution not found")
 
 
-def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radius=1, radius_inner=0.1, give_subframes=False):
+def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0, radius=1, radius_inner=0.1, give_subframes=False):
     '''
     Monte Carlo Sampling Approach for Bias Estimation
 
@@ -119,7 +121,7 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radi
     alpha = np.zeros(num_vert)
     alpha[:] = np.inf
 
-    means_alpha = []
+    alphas = []
 
     iter = 0
     subframes = []
@@ -142,12 +144,14 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radi
         # if correlation is smaller than the i-th position in alpha overwrite it
         alpha[i] = np.min([alpha[i], corr_x_vert[i]])
 
-        means_alpha.append(np.mean(alpha))
+
+        alphas.append(alpha.copy())
 
         iter = iter+1
 
 
-    diff_thres = np.mean(means_alpha[-thres_range]) - np.mean(means_alpha[-1])
+    diff_thres = np.linalg.norm(np.array(alphas[-thres_range])-np.array(alphas[-1]))
+
 
     while (diff_thres > thres) or np.isnan(diff_thres):
 
@@ -167,10 +171,11 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0.001, radi
         # if correlation is smaler than the i-th position in alpha overwrite it
         alpha[i] = np.min([alpha[i], corr_x_vert[i]])
 
-        means_alpha.append(np.mean(alpha))
+        alphas.append(alpha.copy())
 
         iter = iter + 1
-        diff_thres = np.mean(means_alpha[-thres_range]) - np.mean(means_alpha[-1])
+
+        diff_thres = np.linalg.norm(np.array(alphas[-thres_range])-np.array(alphas[-1]))
 
     print("Bias estimation converged after", iter, "iterations")
 
