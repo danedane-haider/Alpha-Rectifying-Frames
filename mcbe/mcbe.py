@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from tqdm import tqdm
 
 def norm_row(W):
     """
@@ -17,6 +18,31 @@ def relu(x, W, b):
     """
     z = np.dot(W, x) - b
     return z * (z > 0)
+
+def relu_inv(z, W, b, list_facets = [], filename="facets.csv", mode='facet'):
+    """
+    reconstructs x from z = ReLU(Wx - b) using a facet-specific left-inverse
+    setting mode to something else will use the whole active sub-frame
+    """
+    if list_facets:
+        facets = list_facets
+    else:
+        facets = read_facets(filename)
+
+    I = np.where(z > 0)[0]
+    if mode == 'facet':
+        for i in range(0, len(facets)):
+            if all(k in I for k in facets[i]):
+                break
+        f_ind = facets[i]
+        print('Facet', i, 'with vertices', f_ind, 'is used for reconstruction.')
+    else:
+        f_ind = I
+    W_f = W[f_ind,:]
+    b_f = b[f_ind]
+    z_f = z[f_ind]
+    x = np.linalg.lstsq(W_f, z_f + b_f, rcond=None)[0] # equivalent to synthesis with the canonical dual frame
+    return x
 
 def random_ball(num_points, dimension, radius=1):
     random_directions = np.random.normal(size=(dimension,num_points))
@@ -201,7 +227,7 @@ def injectivity_on_test_set(W, distribution, num_test_points, num_iter, radius=1
 
     inj = []
 
-    for it in range(num_iter):
+    for it in tqdm(range(num_iter)):
         # sample x
         point = get_point(distribution, d, radius, radius_inner)
 
