@@ -97,7 +97,7 @@ def get_points(distribution, num_points, d, radius=1,radius_inner=0.1):
         raise ValueError("distribution not found")
 
 
-def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0, radius=1, radius_inner=0.1, give_subframes=False):
+def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0, radius=1, radius_inner=0.1, give_subframes=False, quiet=False):
     '''
     Monte Carlo Sampling Approach for Bias Estimation
 
@@ -177,7 +177,8 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0, radius=1
 
         diff_thres = np.linalg.norm(np.array(alphas[-thres_range])-np.array(alphas[-1]))
 
-    print("Bias estimation converged after", iter, "iterations")
+    if not quiet:
+        print("Bias estimation converged after", iter, "iterations")
 
     if give_subframes == True:
         return alpha/np.linalg.norm(polytope,axis=1), set(subframes)
@@ -185,23 +186,20 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0, radius=1
         return alpha/np.linalg.norm(polytope,axis=1),
 
 
-def check_injectivity(W, iter, distribution="sphere", thres_range = 500, thres = 0.001, radius=1, radius_inner=0.1, b=0):
-    '''W.. parameter Matrix
-    distribution, thres_range, thres, radius, radius_inner.. parameters for sample_method()
+def check_injectivity(d, num_vert, iter, distribution="sphere", thres_range = 500, thres = 0, radius=1, radius_inner=0.1, b=0):
+    '''distribution, thres_range, thres, radius, radius_inner.. parameters for sample_method()
     iter.. number of injectivity tests run
     checks injectivity with given parameter iter times and returns percentage of injectivity in the trials'''
 
     bool_injective = []
-    d = W.shape[1]
-    num_vert = W.shape[0]
 
-    for i in range(0, iter):
+    for i in tqdm(range(0, iter)):
         W = norm_row(np.random.randn(num_vert, d))[0]
 
         x = get_point(distribution,d,radius,radius_inner)
 
-        alpha, means_alpha = mcbe(W, distribution, thres_range, thres, radius, radius_inner)
-        bool_injective.append(np.sum(relu(x, W, alpha) >= b) >= d)
+        alpha = mcbe(W, distribution, thres_range, thres, radius, radius_inner, quiet=True)
+        bool_injective.append(np.sum(relu(x, W, alpha) > b) >= d)
 
     return np.mean(bool_injective)
 
@@ -256,5 +254,11 @@ def injectivity_on_test_set(W, distribution, num_test_points, num_iter, radius=1
             inj.append(np.mean(inj_temp))
 
     return inj
+
+def min_N(p,d,n):
+    assert p <= 1
+    assert p > 0
+    assert d > 0
+    return int(np.ceil(np.log((1-p)/n**d)/np.log((n**d-1)/n**d)))
 
 
