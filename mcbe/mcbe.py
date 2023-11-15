@@ -1,7 +1,8 @@
 import numpy as np
 import torch
-from tqdm import tqdm
 import os
+import scipy
+import matplotlib.pyplot as plt
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 def norm_row(W):
@@ -97,13 +98,23 @@ def get_points(distribution, num_points, d, radius=1,radius_inner=0.1):
         raise ValueError("distribution not found")
 
 
-def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0, radius=1, radius_inner=0.1, give_subframes=False, quiet=False):
+def solve_N(d, epsilon, starting_estimate=100):
+    '''solve for N so that (log(N)/N)^(1/d) <= epsilon to find min sampling points N so that the expected value of the
+    Euclidean covering radius of the sphere is asymptotically?? epsilon
+    starting estimate is a hyper parameter from scipy.optimize.fsolve'''
+
+    def objective(x):
+        kappa_d = (1 / d) * (scipy.special.gamma((d + 1) / 2) / (np.sqrt(np.pi) * scipy.special.gamma(d / 2)))
+        return (np.log(x) / (x*kappa_d)) ** (1 / d) - epsilon
+
+    return scipy.optimize.fsolve(objective, starting_estimate)[0]
+
+def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100):
     '''
     Monte Carlo Sampling Approach for Bias Estimation
 
     Usage:
-    distribution choose from normal, sphere, ball, donut
-    stops after iteration (k + thres range) if: mean(alpha_k) - mean(alpha_{k+thres_range}) <  thres
+    distribution choose from sphere, ball, donut the space from which the data points will be drawn
     radius.. if distribution is ball, donut or sphere
     radius_inner.. if distribution = donut
     give_subframes.. if True: also returns subframes calculated for the points used for approximation
@@ -112,8 +123,6 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0, radius=1
     approximated bias; means of values of alpha across iterations
     '''
 
-
-
     d = polytope.shape[1]
     num_vert = polytope.shape[0]
 
@@ -121,15 +130,17 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0, radius=1
     alpha = np.zeros(num_vert)
     alpha[:] = np.inf
 
-    alphas = []
-
-    iter = 0
     subframes = []
+    points = []
 
-    while iter <= thres_range:
+    test_points = get_points(distribution, num_vert, d, radius,radius_inner)
+    percent_inj = []
+
+    for i in range(int(np.ceil(N))):
 
         # sample x
-        point = get_point(distribution, d, radius,radius_inner)
+        point = get_point("sphere", d, radius)
+        points.append(point)
 
         corr_x_vert = [np.dot(point, i) for i in polytope]
 
@@ -144,121 +155,60 @@ def mcbe(polytope, distribution="sphere", thres_range = 500, thres = 0, radius=1
         # if correlation is smaller than the i-th position in alpha overwrite it
         alpha[i] = np.min([alpha[i], corr_x_vert[i]])
 
-
-        alphas.append(alpha.copy())
-
-        iter = iter+1
+        if plot == True:
+            percent_inj.append(check_injectivity_naive(polytope, alpha, iter_plot, distribution, radius, radius_inner, points=test_points))
 
 
-    diff_thres = np.linalg.norm(np.array(alphas[-thres_range])-np.array(alphas[-1]))
+    if distribution == "ball":
+        #if distribution is ball set all positive alpha values to zero
+        alpha[alpha >= 0] = 0
 
+    if distribution == "donut":
+        alpha = alpha*radius_inner
 
-    while (diff_thres > thres) or np.isnan(diff_thres):
+    if plot == True:
+        percent_inj.append(
+            check_injectivity_naive(polytope, alpha, iter_plot, distribution, radius, radius_inner, points=test_points))
 
-        # sample x
-        point = get_point(distribution, d, radius,radius_inner)
+        plt.plot(percent_inj)
+        plt.xlabel("iteration")
+        plt.ylabel("percent of test set injective")
+        plt.title("training process")
 
-        corr_x_vert = [np.dot(point, i) for i in polytope]
-
-        # find subframes
-        if give_subframes == True:
-            subframe = np.argsort(corr_x_vert)[-d:]
-            subframes.append(tuple(np.sort(subframe)))
-
-        # find the d-nearest point of the polytope
-        i = np.argsort(corr_x_vert)[-d]
-
-        # if correlation is smaler than the i-th position in alpha overwrite it
-        alpha[i] = np.min([alpha[i], corr_x_vert[i]])
-
-        alphas.append(alpha.copy())
-
-        iter = iter + 1
-
-        diff_thres = np.linalg.norm(np.array(alphas[-thres_range])-np.array(alphas[-1]))
-
-    if not quiet:
-        print("Bias estimation converged after", iter, "iterations")
 
     if give_subframes == True:
-        return alpha/np.linalg.norm(polytope,axis=1), set(subframes)
+        return alpha/np.linalg.norm(polytope,axis=1), set(subframes), points
     else:
-        return alpha/np.linalg.norm(polytope,axis=1),
+        return alpha/np.linalg.norm(polytope,axis=1)
 
 
-def check_injectivity(d, num_vert, iter, distribution="sphere", thres_range = 500, thres = 0, radius=1, radius_inner=0.1, b=0):
+def check_injectivity_naive(W, b, iter, distribution="sphere", radius=1, radius_inner=0.1, points=[]):
     '''distribution, thres_range, thres, radius, radius_inner.. parameters for sample_method()
     iter.. number of injectivity tests run
     checks injectivity with given parameter iter times and returns percentage of injectivity in the trials'''
 
     bool_injective = []
+    d = W.shape[1]
 
-    for i in tqdm(range(0, iter)):
-        W = norm_row(np.random.randn(num_vert, d))[0]
+    if list(points):
+        iter = len(points)
 
-        x = get_point(distribution,d,radius,radius_inner)
 
-        alpha = mcbe(W, distribution, thres_range, thres, radius, radius_inner, quiet=True)
-        bool_injective.append(np.sum(relu(x, W, alpha) > b) >= d)
+    for i in range(0, iter):
+
+        if list(points):
+            x = points[i]
+
+        else:
+            x = get_point(distribution,d,radius,radius_inner)
+
+        bool_injective.append(np.sum(relu(x, W, b) > 0) >= d)
 
     return np.mean(bool_injective)
 
 
-def injectivity_on_test_set(W, distribution, num_test_points, num_iter, radius=1, radius_inner=0.1):
 
-    """checks injectivity on test set random drawn from distribution for every trainings iteration
-    Usage:
-    W.. weight matrix
-    num_test_points.. number of points in test set
-    num_iter.. number of trainings iterations
-    distribution, radius, radius_inner.. parameter vor mcbe
 
-    Output:
-    percent of samples in the test set for which the relu layer with W and the estimated alpha is injective for every
-    iteration"""
 
-    d = W.shape[1]
-    num_vert = W.shape[0]
-
-    # initiate alpha as inf
-    alpha = np.zeros(num_vert)
-    alpha[:] = np.inf
-
-    means_alpha = []
-
-    test_points = get_points(distribution, num_test_points, d, radius, radius_inner)
-
-    inj = []
-
-    for it in tqdm(range(num_iter)):
-        # sample x
-        point = get_point(distribution, d, radius, radius_inner)
-
-        corr_x_vert = [np.dot(point, i) for i in W]
-
-        # find the d-nearest point of the polytope
-        i = np.argsort(corr_x_vert)[-d]
-
-        # if correlation is smaller than the i-th position in alpha overwrite it
-        alpha[i] = np.min([alpha[i], corr_x_vert[i]])
-
-        means_alpha.append(np.mean(alpha))
-
-        # check injectivity
-        inj_temp = []
-
-        if np.max(alpha) < np.inf:
-            for x in test_points:
-                inj_temp.append(np.sum(relu(x, W, alpha) != 0) >= d)
-
-            inj.append(np.mean(inj_temp))
-
-    return inj
-
-def min_N(p,d,n):
-    assert p <= 1
-    assert p > 0
-    assert d > 0
-    return int(np.ceil(np.log((1-p)/n**d)/np.log((n**d-1)/n**d)))
 
 
