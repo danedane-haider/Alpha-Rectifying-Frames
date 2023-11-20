@@ -57,9 +57,9 @@ def random_ball(num_points, dimension, radius=1):
 def random_donut(num_points, dimension, radius_outer=1,radius_inner=0.1):
     random_directions = np.random.normal(size=(dimension,num_points))
     random_directions /= np.linalg.norm(random_directions, axis=0)
-    random_radii = np.random.uniform(radius_inner,1,size=(num_points))
+    random_radii = np.random.uniform(radius_inner**dimension,radius_outer**dimension,size=(num_points)) ** (1/dimension)
 
-    return radius_outer * (random_directions * random_radii).T
+    return (random_directions * random_radii).T
 
 def random_point(num_points, dimension):
 
@@ -108,6 +108,15 @@ def solve_N(d, epsilon, starting_estimate=100):
         return (np.log(x) / (x*kappa_d)) ** (1 / d) - epsilon
 
     return scipy.optimize.fsolve(objective, starting_estimate)[0]
+
+def solve_eps(d, N):
+    '''solve for epsilon so that (log(N)/N)^(1/d) <= epsilon to find min sampling points N so that the expected value of the
+        Euclidean covering radius of the sphere is asymptotically?? epsilon'''
+
+    kappa_d = (1 / d) * (scipy.special.gamma((d + 1) / 2) / (np.sqrt(np.pi) * scipy.special.gamma(d / 2)))
+
+    return ((np.log(N))/(N*kappa_d))**(1/d)
+
 
 def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100):
     '''
