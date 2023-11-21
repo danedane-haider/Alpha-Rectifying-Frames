@@ -70,38 +70,97 @@ def random_sphere(num_points, dimension, radius=1):
     return radius*norm_row(np.random.randn(num_points, dimension))
 
 
-def get_point(distribution, d, radius=1,radius_inner=0.1):
+def get_point(distribution, d, radius=1,radius_inner=0.1, positive = False, nonnegative = False):
+    """sample point from distribution of dimensionality d
+    if positive=True all coordinates are positive
+    if nonnegative=True not all coordinates are negative"""
 
-    if distribution == "sphere":
-        return random_sphere(1, d, radius)[0][0]
-    elif distribution == "normal":
-        return random_point(1, d)[0]
-    elif distribution == "donut":
-        return random_donut(1, d, radius_outer=radius,radius_inner=radius_inner)[0]
-    elif distribution == "ball":
-        return random_ball(1, d, radius)[0]
+    point = np.array([-1]*d)
+
+    if nonnegative:
+        while np.all(point < 0):
+            if distribution == "sphere":
+                point =  random_sphere(1, d, radius)[0][0]
+            elif distribution == "normal":
+                point =  random_point(1, d)[0]
+            elif distribution == "donut":
+                point =  random_donut(1, d, radius_outer=radius,radius_inner=radius_inner)[0]
+            elif distribution == "ball":
+                point =  random_ball(1, d, radius)[0]
+            else:
+                raise ValueError("distribution not found")
+
     else:
-        raise ValueError("distribution not found")
+        if distribution == "sphere":
+            point =  random_sphere(1, d, radius)[0][0]
+        elif distribution == "normal":
+            point =  random_point(1, d)[0]
+        elif distribution == "donut":
+            point =  random_donut(1, d, radius_outer=radius,radius_inner=radius_inner)[0]
+        elif distribution == "ball":
+            point =  random_ball(1, d, radius)[0]
+        else:
+            raise ValueError("distribution not found")
 
-
-def get_points(distribution, num_points, d, radius=1,radius_inner=0.1):
-
-    if distribution == "sphere":
-        return random_sphere(num_points, d, radius)[0]
-    elif distribution == "normal":
-        return random_point(num_points, d)
-    elif distribution == "donut":
-        return random_donut(num_points, d, radius_outer=radius,radius_inner=radius_inner)
-    elif distribution == "ball":
-        return random_ball(num_points, d, radius)
+    if positive:
+        return np.abs(point)
     else:
-        raise ValueError("distribution not found")
+        return point
+
+
+
+def get_points(distribution, num_points, d, radius=1,radius_inner=0.1, positive = False, nonnegative = False):
+    """sample num_points points from distribution of dimensionality d
+        if positive=True all coordinates are positive
+        if nonnegative=True not all coordinates are negative"""
+    points = []
+
+    if nonnegative:
+        while len(points) < num_points:
+            if distribution == "sphere":
+                samples = random_sphere(num_points, d, radius)[0]
+                nonneg_sample = samples[[np.any(s > 0) for s in samples]]
+                for sample in nonneg_sample:
+                    points.append(sample)
+            elif distribution == "normal":
+                samples = random_point(num_points, d)
+                nonneg_sample = samples[[np.any(s > 0) for s in samples]]
+                for sample in nonneg_sample:
+                    points.append(sample)
+            elif distribution == "donut":
+                samples = random_donut(num_points, d, radius_outer=radius,radius_inner=radius_inner)
+                nonneg_sample = samples[[np.any(s > 0) for s in samples]]
+                for sample in nonneg_sample:
+                    points.append(sample)
+            elif distribution == "ball":
+                samples = random_ball(num_points, d, radius)
+                nonneg_sample = samples[[np.any(s > 0) for s in samples]]
+                for sample in nonneg_sample:
+                    points.append(sample)
+            else:
+                raise ValueError("distribution not found")
+
+    else:
+        if distribution == "sphere":
+            points = random_sphere(num_points, d, radius)[0]
+        elif distribution == "normal":
+            points = random_point(num_points, d)
+        elif distribution == "donut":
+            points = random_donut(num_points, d, radius_outer=radius, radius_inner=radius_inner)
+        elif distribution == "ball":
+            points = random_ball(num_points, d, radius)
+        else:
+            raise ValueError("distribution not found")
+    if positive:
+        return np.abs(np.array(points)[:12])
+    else:
+        return np.array(points)[:12]
 
 
 def solve_N(d, epsilon, starting_estimate=100):
-    '''solve for N so that (log(N)/N)^(1/d) <= epsilon to find min sampling points N so that the expected value of the
+    """solve for N so that (log(N)/N)^(1/d) <= epsilon to find min sampling points N so that the expected value of the
     Euclidean covering radius of the sphere is asymptotically?? epsilon
-    starting estimate is a hyper parameter from scipy.optimize.fsolve'''
+    starting estimate is a hyper parameter from scipy.optimize.fsolve"""
 
     def objective(x):
         kappa_d = (1 / d) * (scipy.special.gamma((d + 1) / 2) / (np.sqrt(np.pi) * scipy.special.gamma(d / 2)))
@@ -118,7 +177,7 @@ def solve_eps(d, N):
     return ((np.log(N))/(N*kappa_d))**(1/d)
 
 
-def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100):
+def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100, K_positive = False):
     '''
     Monte Carlo Sampling Approach for Bias Estimation
 
@@ -127,9 +186,12 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
     radius.. if distribution is ball, donut or sphere
     radius_inner.. if distribution = donut
     give_subframes.. if True: also returns subframes calculated for the points used for approximation
+    plot.. if true plot the injectivity of a test set per iteration
+    iter_plot.. number of testsamples used in the plot
+    K_positive.. set True if the Set K is known to be positive
 
     Output:
-    approximated bias; means of values of alpha across iterations
+    approximated bias
     '''
 
     d = polytope.shape[1]
@@ -142,13 +204,20 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
     subframes = []
     points = []
 
-    test_points = get_points(distribution, num_vert, d, radius,radius_inner)
+    if K_positive:
+        positive = True
+        nonnegative = True
+    else:
+        positive = False
+        nonnegative = False
+
+    test_points = get_points(distribution, num_vert, d, radius,radius_inner, positive=positive)
     percent_inj = []
 
     for i in range(int(np.ceil(N))):
 
         # sample x
-        point = get_point("sphere", d, radius)
+        point = get_point("sphere", d, radius, nonnegative=nonnegative)
         points.append(point)
 
         corr_x_vert = [np.dot(point, i) for i in polytope]
