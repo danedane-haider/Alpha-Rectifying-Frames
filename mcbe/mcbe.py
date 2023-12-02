@@ -166,7 +166,8 @@ def solve_N(d, epsilon, starting_estimate=100):
         kappa_d = (1 / d) * (scipy.special.gamma((d + 1) / 2) / (np.sqrt(np.pi) * scipy.special.gamma(d / 2)))
         return (np.log(x) / (x*kappa_d)) ** (1 / d) - epsilon
 
-    return scipy.optimize.fsolve(objective, starting_estimate)[0]
+    N = scipy.optimize.fsolve(objective, starting_estimate)[0]
+    return int(np.ceil(N))
 
 def solve_eps(d, N):
     '''solve for epsilon so that (log(N)/N)^(1/d) <= epsilon to find min sampling points N so that the expected value of the
@@ -177,7 +178,7 @@ def solve_eps(d, N):
     return ((np.log(N))/(N*kappa_d))**(1/d)
 
 
-def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100, K_positive = False):
+def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100, K_positive = False, init=True):
     '''
     Monte Carlo Sampling Approach for Bias Estimation
 
@@ -211,8 +212,15 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
         positive = False
         nonnegative = False
 
-    test_points = get_points(distribution, num_vert, d, radius,radius_inner, positive=positive)
+    test_points = get_points(distribution, num_vert, d, radius, radius_inner, positive=positive)
     percent_inj = []
+
+    if init == True:
+        # initiate alpha by cross correlations among Phi
+        for i in range(num_vert):
+            corr_x_vert = [np.dot(polytope[i,:], phi) for phi in polytope]
+            idx = np.argsort(corr_x_vert)[-d]
+            alpha[i] = np.min([alpha[idx], corr_x_vert[idx]])
 
     for i in range(int(np.ceil(N))):
 
@@ -220,7 +228,7 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
         point = get_point("sphere", d, radius, nonnegative=nonnegative)
         points.append(point)
 
-        corr_x_vert = [np.dot(point, i) for i in polytope]
+        corr_x_vert = [np.dot(point, phi) for phi in polytope]
 
         #find subframes
         if give_subframes == True:
@@ -228,10 +236,10 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
             subframes.append(tuple(np.sort(subframe)))
 
         # find the d-nearest point of the polytope
-        i = np.argsort(corr_x_vert)[-d]
+        idx = np.argsort(corr_x_vert)[-d]
 
         # if correlation is smaller than the i-th position in alpha overwrite it
-        alpha[i] = np.min([alpha[i], corr_x_vert[i]])
+        alpha[idx] = np.min([alpha[idx], corr_x_vert[idx]])
 
         if plot == True:
             percent_inj.append(check_injectivity_naive(polytope, alpha, iter_plot, distribution, radius, radius_inner, points=test_points))
