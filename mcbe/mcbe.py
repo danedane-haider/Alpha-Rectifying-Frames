@@ -67,7 +67,7 @@ def random_point(num_points, dimension):
 
 def random_sphere(num_points, dimension, radius=1):
 
-    return radius*norm_row(np.random.randn(num_points, dimension))
+    return radius*norm_row(np.random.randn(num_points, dimension))[0], radius*norm_row(np.random.randn(num_points, dimension))[1]
 
 
 def get_point(distribution, d, radius=1,radius_inner=0.1, positive = False, nonnegative = False):
@@ -178,7 +178,7 @@ def solve_eps(d, N):
     return ((np.log(N))/(N*kappa_d))**(1/d)
 
 
-def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100, K_positive = False, init=True, sample_on_sphere = True):
+def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100, K_positive = False, init=True, sample_on_sphere = True, return_alpha_list = False, return_plot_data = False):
     '''
     Monte Carlo Sampling Approach for Bias Estimation
 
@@ -201,6 +201,7 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
     # initiate alpha as inf
     alpha = np.zeros(num_vert)
     alpha[:] = np.inf
+    alpha_list = []
 
     subframes = []
     points = []
@@ -224,6 +225,9 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
 
     for i in range(int(np.ceil(N))):
 
+        if i % 50 ==1:
+            alpha_list.append(alpha/np.linalg.norm(polytope,axis=1))
+
         # sample x
         if sample_on_sphere == True:
             point = get_point("sphere", d, radius, nonnegative=nonnegative)
@@ -241,10 +245,11 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
             subframes.append(tuple(np.sort(subframe)))
 
         # find the d-nearest point of the polytope
-        idx = np.argsort(corr_x_vert)[-d]
+        idx_list = np.argsort(corr_x_vert)[-d:]
 
         # if correlation is smaller than the i-th position in alpha overwrite it
-        alpha[idx] = np.min([alpha[idx], corr_x_vert[idx]])
+        for idx in idx_list:
+            alpha[idx] = np.min([alpha[idx], corr_x_vert[idx]])
 
         if plot == True:
             percent_inj.append(check_injectivity_naive(polytope, alpha, iter_plot, distribution, radius, radius_inner, points=test_points))
@@ -265,11 +270,14 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
         plt.plot(percent_inj)
         plt.xlabel("iteration")
         plt.ylabel("percent of test set injective")
-        plt.title("training process")
 
 
     if give_subframes == True:
         return alpha/np.linalg.norm(polytope,axis=1), set(subframes), points
+    elif return_alpha_list == True:
+        return alpha/np.linalg.norm(polytope,axis=1), alpha_list
+    elif return_plot_data == True:
+        return alpha/np.linalg.norm(polytope,axis=1), percent_inj
     else:
         return alpha/np.linalg.norm(polytope,axis=1)
     
