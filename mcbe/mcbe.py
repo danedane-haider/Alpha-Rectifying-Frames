@@ -178,7 +178,7 @@ def solve_eps(d, N):
     return ((np.log(N))/(N*kappa_d))**(1/d)
 
 
-def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100, K_positive = False, init=True, sample_on_sphere = True, return_alpha_list = False, return_plot_data = False):
+def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100, K_positive = False, init=True, sample_on_sphere = True, return_alpha_list = False, return_plot_data = False, remove_covering_radius = False):
     '''
     Monte Carlo Sampling Approach for Bias Estimation
 
@@ -252,7 +252,12 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
             alpha[idx] = np.min([alpha[idx], corr_x_vert[idx]])
 
         if plot == True:
-            percent_inj.append(check_injectivity_naive(polytope, alpha, iter_plot, distribution, radius, radius_inner, points=test_points))
+            # remove covering radius 
+            alpha_plot = alpha
+            if remove_covering_radius == True:
+                covering_radius = (np.log(i)/i)**(1/d)
+                alpha_plot = alpha_plot - covering_radius
+            percent_inj.append(check_injectivity_naive(polytope, alpha_plot, iter_plot, distribution, radius, radius_inner, points=test_points))
 
     if sample_on_sphere == True:   
 
@@ -262,6 +267,11 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
 
         if distribution == "donut":
             alpha = alpha*radius_inner
+
+    if remove_covering_radius == True:
+        covering_radius = (np.log(N)/N)**(1/d)
+        alpha = alpha - covering_radius
+
 
     if plot == True:
         percent_inj.append(
@@ -282,8 +292,37 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
         return alpha/np.linalg.norm(polytope,axis=1)
     
 
+def check_injectivity_naive(W, b, iter, distribution="sphere", radius=1, radius_inner=0.1, points=[]):
+    '''distribution, thres_range, thres, radius, radius_inner.. parameters for sample_method()
+    iter.. number of injectivity tests run
+    checks injectivity with given parameter iter times and returns percentage of injectivity in the trials'''
 
-def be_given_points(polytope, points, init=True, give_subframes=False, sample_on_sphere=False):
+    bool_injective = []
+    d = W.shape[1]
+
+    if list(points):
+        iter = len(points)
+
+
+    for i in range(0, iter):
+
+        if list(points):
+            x = points[i]
+
+        else:
+            x = get_point(distribution,d,radius,radius_inner)
+
+        bool_injective.append(np.sum(relu(x, W, b) > 0) >= d)
+
+    return np.mean(bool_injective)
+
+
+
+
+################################################ for dd mcbe #########################################################################
+from sklearn.neighbors import KernelDensity
+
+def be_given_points(polytope, points, init=True, give_subframes=False):
     d = polytope.shape[1]
     num_vert = polytope.shape[0]
 
@@ -316,52 +355,108 @@ def be_given_points(polytope, points, init=True, give_subframes=False, sample_on
         # if correlation is smaller than the i-th position in alpha overwrite it
         alpha[idx] = np.min([alpha[idx], corr_x_vert[idx]])
 
-    if sample_on_sphere == True:   
-
-        if distribution == "ball":
-            #if distribution is ball set all positive alpha values to zero
-            alpha[alpha >= 0] = 0
-
-        if distribution == "donut":
-            alpha = alpha*radius_inner
-
     if give_subframes == True:
         return alpha/np.linalg.norm(polytope,axis=1), set(subframes), points
     else:
         return alpha/np.linalg.norm(polytope,axis=1)
+    
 
 
-        
+def blowup_data(X_train,times_to_blowup,var = 0.5):
+    '''X_train as torch tensor
+    times_to_blowup: how many times the data should be blown up
+    var: variance of the normal distribution to add noise to the data
+    returns the blown up data'''
+    X_train_noisy = X_train + np.random.normal(0,var,X_train.shape)
+    for i in range(times_to_blowup-1):
+        X_train_noisy = torch.cat((X_train_noisy,X_train + np.random.normal(0,var,X_train.shape)),0)
+    X_train_blowup = torch.cat((X_train,X_train_noisy),0)
+    return X_train_blowup
 
+def add_rd_data(X, times_to_blowup, var=1):
+    '''X as torch tensor
+    times_to_blowup: how many times the data should be blown up
+    var: variance of the normal distribution to create the data
+    returns the random data added to the original data'''
+    X_rd = np.random.normal(0,var,X.shape)
+    X_rd = torch.from_numpy(X_rd).float()
+    for i in range(times_to_blowup-1):
+        X_rd = torch.cat((X_rd, torch.from_numpy(np.random.normal(0,var,X.shape))),0)
+    X_add_rd = torch.cat((X,X_rd),0)
+    return X_add_rd
 
+def add_kd_samples(X, times_to_blowup):
+    '''Function to add samples to the data by using kernel density estimation.
+    X: data to be added as torch tensor
+    times_to_blowup: factor to blow up the data'''
+    
+    #kde = KernelDensity(kernel='gaussian', bandwidth=0.2).fit(X)
+    kde = KernelDensity(kernel='gaussian', bandwidth = "scott").fit(X)
+    X_kd = kde.sample(times_to_blowup*X.shape[0])
+    X_kd = torch.from_numpy(X_kd).float()
+    X_add_kd = torch.cat((X,X_kd),0)
+    return X_add_kd
 
+from tqdm import tqdm
 
-def check_injectivity_naive(W, b, iter, distribution="sphere", radius=1, radius_inner=0.1, points=[]):
-    '''distribution, thres_range, thres, radius, radius_inner.. parameters for sample_method()
-    iter.. number of injectivity tests run
-    checks injectivity with given parameter iter times and returns percentage of injectivity in the trials'''
+def dd_mcbe(W, X_train, num_estimation_points, dd_method = "kde", var_dd = 0.3, initialze = True):
 
-    bool_injective = []
+    """data driven monte carlo bias estimation
+    dd_method: kde for kernel density estimation, blowup for blowing up the data with gaussian noise
+    var_dd: variance of the noise added to the data for blowup
+    initialze: if True the bias is initialized by cross correlations among W"""
+
+    if dd_method == "kde":
+        kde = KernelDensity(kernel='gaussian', bandwidth = "scott").fit(X_train)
+
     d = W.shape[1]
+    num_vert = W.shape[0]
 
-    if list(points):
-        iter = len(points)
+    # initiate alpha as inf
+    alpha = np.zeros(num_vert)
+    alpha[:] = np.inf
+
+    subframes = []
+
+    if initialze == True:
+        # initiate alpha by cross correlations among Phi
+        for i in range(num_vert):
+            corr_x_vert = [np.dot(W[i,:], phi) for phi in W]
+            idx = np.argsort(corr_x_vert)[-d]
+            alpha[i] = np.min([alpha[idx], corr_x_vert[idx]])
 
 
-    for i in range(0, iter):
+    for i in tqdm(range(num_estimation_points)):
 
-        if list(points):
-            x = points[i]
 
+        if i < X_train.shape[0]:
+            point = X_train[i,:]
         else:
-            x = get_point(distribution,d,radius,radius_inner)
+            if dd_method == "kde":
+                point = kde.sample(1)
+            elif dd_method == "blowup":
+                point = X_train[np.random.randint(0,X_train.shape[0]),:] + np.random.normal(0,var_dd,d)
 
-        bool_injective.append(np.sum(relu(x, W, b) > 0) >= d)
+            else:
+                raise ValueError("dd_method not found")
 
-    return np.mean(bool_injective)
+        corr_x_vert = np.array([np.dot(point, phi) for phi in W]).flatten()
+
+        # find the d-nearest point of the polytope
+        idx = np.argsort(corr_x_vert)[-d]
+
+        # if correlation is smaller than the i-th position in alpha overwrite it
+        alpha[idx] = np.min([alpha[idx], corr_x_vert[idx]])
+
+    return alpha/np.linalg.norm(W,axis=1)
+
+    
+
+    
 
 
 
 
 
+    
 
