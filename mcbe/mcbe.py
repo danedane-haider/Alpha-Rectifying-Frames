@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import os
 import scipy
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 def norm_row(W):
@@ -426,7 +426,7 @@ def dd_mcbe(W, X_train, num_estimation_points, dd_method = "kde", var_dd = 0.3, 
             alpha[i] = np.min([alpha[idx], corr_x_vert[idx]])
 
 
-    for i in tqdm(range(num_estimation_points)):
+    for i in range(num_estimation_points):
 
 
         if i < X_train.shape[0]:
