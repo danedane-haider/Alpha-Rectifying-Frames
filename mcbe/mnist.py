@@ -22,10 +22,6 @@ scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
-X_train = X_train[:50,:]
-y_train = y_train[:50]
-X_test = X_test[:50,:]
-y_test = y_test[:50]
 
 # size of the layers
 l1 = 1024
