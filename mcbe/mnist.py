@@ -131,7 +131,7 @@ inj_small_bias = []
 for i in tqdm.tqdm(range(num_iter)):
 
     #kernel density estimation
-    est_alpha_kd = mcbe.dd_mcbe(np.array(weights)[-1], X_train, num_estimation_points, dd_method="kd")
+    est_alpha_kd = mcbe.dd_mcbe(np.array(weights)[-1], X_train, num_estimation_points, dd_method="kde")
     percent_inj_kd = mcbe.check_injectivity_naive(W = np.array(weights)[-1], b=est_alpha_kd, points=X_test,iter=X_test.shape[0])
     inj_kd.append(percent_inj_kd)
 

@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import os
 import scipy
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 def norm_row(W):
