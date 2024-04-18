@@ -1,7 +1,6 @@
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 import torch
 import torch.nn.functional as F
@@ -9,10 +8,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 
 import tqdm
-import os
 import mcbe
-from mpl_toolkits.mplot3d import Axes3D
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import keras.datasets
 
