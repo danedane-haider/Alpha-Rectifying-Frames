@@ -11,6 +11,15 @@ import tqdm
 import mcbe
 from sklearn.preprocessing import StandardScaler
 import keras.datasets
+import argparse
+
+#parse arguments
+parser = argparse.ArgumentParser(description='give number of estimation points')
+parser.add_argument('--num_estimation_points', type=int, help='number of estimation points for ddmcbe')
+args = parser.parse_args()
+
+num_estimation_points = args.num_estimation_points
+print("ddmcbe running with",num_estimation_points,"estimation points")
 
 (X_train, y_train), (X_test, y_test) = keras.datasets.mnist.load_data()
 
@@ -115,8 +124,6 @@ for epoch in tqdm.trange(EPOCHS):
 print("Training done")
 
 num_iter = 10
-num_estimation_points = 100000
-#test injectivity
 
 inj_kd = []
 inj_rd = []
@@ -143,4 +150,4 @@ for i in tqdm.tqdm(range(num_iter)):
     inj_mcbe.append(percent_inj)
 
 inj_mnist = pd.DataFrame({"kd":inj_kd,"blowup":inj_blowup,"mcbe":inj_mcbe})
-inj_mnist.to_csv("inj_mnist.csv")
+inj_mnist.to_csv("inj_mnist" + str(num_estimation_points) +".csv")
