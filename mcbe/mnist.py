@@ -116,6 +116,7 @@ print("Training done")
 
 num_iter = 10
 num_estimation_points = 100000
+#test injectivity
 
 inj_kd = []
 inj_rd = []
