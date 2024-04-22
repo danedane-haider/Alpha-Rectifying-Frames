@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 import keras.datasets
 from skimage.color import rgb2gray
 import argparse
+import pandas as pd
 
 #parse arguments
 parser = argparse.ArgumentParser(description='give number of estimation points')
@@ -160,3 +161,6 @@ for i in tqdm.tqdm(range(num_iter)):
     est_alpha = mcbe.mcbe(polytope=np.array(weights)[-1],N=num_estimation_points,distribution="normal",radius=np.max(np.array(X_train)), sample_on_sphere=False)
     percent_inj = mcbe.check_injectivity_naive(W = np.array(weights)[-1], b=est_alpha, points=X_test,iter=X_test.shape[0])
     inj_mcbe.append(percent_inj)
+
+inj_cifar = pd.DataFrame({"kd":inj_kd,"blowup":inj_blowup,"mcbe":inj_mcbe})
+inj_cifar.to_csv("inj_cifar" + str(num_estimation_points) +".csv")
