@@ -42,7 +42,7 @@ X_train = scaler.fit_transform(X_train)
 X_test = scaler.transform(X_test)
 
 # size of the layers
-l1 = 2048
+l1 = 1330
 l2 = 256
 l3 = 128
 
