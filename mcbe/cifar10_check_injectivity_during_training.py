@@ -33,6 +33,8 @@ X_test = scaler.transform(X_test)
 l2 = 256
 l3 = 128
 
+np.save('test.npy',X_train[0,0])
+
 class Model(nn.Module):
     def __init__(self, input_dim, l1):
         super(Model, self).__init__()
