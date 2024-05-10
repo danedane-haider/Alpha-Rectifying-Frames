@@ -49,13 +49,7 @@ class Maxbias_loss(nn.Module):
     def forward(self, max_bias, bias):
         return 0.1*np.linalg.norm(np.max(np.array([bias - max_bias, np.zeros_like(bias)]),axis=0))
     
-model     = Model(X_train.shape[1],l1)
-model_inj = Model(X_train.shape[1],l1)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-optimizer_inj = torch.optim.Adam(model_inj.parameters(), lr=0.01)
-loss_fn   = nn.CrossEntropyLoss()
-loss_fn_maxbias = Maxbias_loss()
-model
+
 
 
 X_train = Variable(torch.from_numpy(X_train)).float()
@@ -68,7 +62,14 @@ num_iter = 10
 accuracys = []
 accuracys_inj = []
 
-for i in num_iter:
+for i in tqdm.trange(num_iter):
+
+    model     = Model(X_train.shape[1],l1)
+    model_inj = Model(X_train.shape[1],l1)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    optimizer_inj = torch.optim.Adam(model_inj.parameters(), lr=0.01)
+    loss_fn   = nn.CrossEntropyLoss()
+    loss_fn_maxbias = Maxbias_loss()
 
     weights = []
     weights_norm = []
