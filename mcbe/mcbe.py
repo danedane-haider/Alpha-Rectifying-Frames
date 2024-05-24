@@ -67,7 +67,7 @@ def random_point(num_points, dimension):
 
 def random_sphere(num_points, dimension, radius=1):
 
-    return radius*norm_row(np.random.randn(num_points, dimension))
+    return radius*norm_row(np.random.randn(num_points, dimension))[0], radius*norm_row(np.random.randn(num_points, dimension))[1]
 
 
 def get_point(distribution, d, radius=1,radius_inner=0.1, positive = False, nonnegative = False):
@@ -178,7 +178,7 @@ def solve_eps(d, N):
     return ((np.log(N))/(N*kappa_d))**(1/d)
 
 
-def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100, K_positive = False, init=True):
+def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_subframes=False, plot=False, iter_plot = 100, K_positive = False, init=True, sample_on_sphere = True, return_alpha_list = False, return_plot_data = False):
     '''
     Monte Carlo Sampling Approach for Bias Estimation
 
@@ -201,6 +201,7 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
     # initiate alpha as inf
     alpha = np.zeros(num_vert)
     alpha[:] = np.inf
+    alpha_list = []
 
     subframes = []
     points = []
@@ -224,9 +225,83 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
 
     for i in range(int(np.ceil(N))):
 
+        if i % 50 ==1:
+            alpha_list.append(alpha/np.linalg.norm(polytope,axis=1))
+
         # sample x
-        point = get_point("sphere", d, radius, nonnegative=nonnegative)
-        points.append(point)
+        if sample_on_sphere == True:
+            point = get_point("sphere", d, radius, nonnegative=nonnegative)
+            points.append(point)
+
+        else:
+            point = get_point(distribution, d, radius, radius_inner, positive=positive, nonnegative=nonnegative)
+            points.append(point)
+
+        corr_x_vert = [np.dot(point, phi) for phi in polytope]
+
+        #find subframes
+        if give_subframes == True:
+            subframe = np.argsort(corr_x_vert)[-d:]
+            subframes.append(tuple(np.sort(subframe)))
+
+        # find the d-nearest point of the polytope
+        idx_list = np.argsort(corr_x_vert)[-d:]
+
+        # if correlation is smaller than the i-th position in alpha overwrite it
+        for idx in idx_list:
+            alpha[idx] = np.min([alpha[idx], corr_x_vert[idx]])
+
+        if plot == True:
+            percent_inj.append(check_injectivity_naive(polytope, alpha, iter_plot, distribution, radius, radius_inner, points=test_points))
+
+    if sample_on_sphere == True:   
+
+        if distribution == "ball":
+            #if distribution is ball set all positive alpha values to zero
+            alpha[alpha >= 0] = 0
+
+        if distribution == "donut":
+            alpha = alpha*radius_inner
+
+    if plot == True:
+        percent_inj.append(
+            check_injectivity_naive(polytope, alpha, iter_plot, distribution, radius, radius_inner, points=test_points))
+
+        plt.plot(percent_inj)
+        plt.xlabel("iteration")
+        plt.ylabel("percent of test set injective")
+
+
+    if give_subframes == True:
+        return alpha/np.linalg.norm(polytope,axis=1), set(subframes), points
+    elif return_alpha_list == True:
+        return alpha/np.linalg.norm(polytope,axis=1), alpha_list
+    elif return_plot_data == True:
+        return alpha/np.linalg.norm(polytope,axis=1), percent_inj
+    else:
+        return alpha/np.linalg.norm(polytope,axis=1)
+    
+
+
+def be_given_points(polytope, points, init=True, give_subframes=False, sample_on_sphere=False):
+    d = polytope.shape[1]
+    num_vert = polytope.shape[0]
+
+    # initiate alpha as inf
+    alpha = np.zeros(num_vert)
+    alpha[:] = np.inf
+
+    subframes = []
+
+    if init == True:
+        # initiate alpha by cross correlations among Phi
+        for i in range(num_vert):
+            corr_x_vert = [np.dot(polytope[i,:], phi) for phi in polytope]
+            idx = np.argsort(corr_x_vert)[-d]
+            alpha[i] = np.min([alpha[idx], corr_x_vert[idx]])
+
+    
+    for point in points:
 
         corr_x_vert = [np.dot(point, phi) for phi in polytope]
 
@@ -241,31 +316,24 @@ def mcbe(polytope, N, distribution="sphere", radius=1, radius_inner=0.1, give_su
         # if correlation is smaller than the i-th position in alpha overwrite it
         alpha[idx] = np.min([alpha[idx], corr_x_vert[idx]])
 
-        if plot == True:
-            percent_inj.append(check_injectivity_naive(polytope, alpha, iter_plot, distribution, radius, radius_inner, points=test_points))
+    if sample_on_sphere == True:   
 
+        if distribution == "ball":
+            #if distribution is ball set all positive alpha values to zero
+            alpha[alpha >= 0] = 0
 
-    if distribution == "ball":
-        #if distribution is ball set all positive alpha values to zero
-        alpha[alpha >= 0] = 0
-
-    if distribution == "donut":
-        alpha = alpha*radius_inner
-
-    if plot == True:
-        percent_inj.append(
-            check_injectivity_naive(polytope, alpha, iter_plot, distribution, radius, radius_inner, points=test_points))
-
-        plt.plot(percent_inj)
-        plt.xlabel("iteration")
-        plt.ylabel("percent of test set injective")
-        plt.title("training process")
-
+        if distribution == "donut":
+            alpha = alpha*radius_inner
 
     if give_subframes == True:
         return alpha/np.linalg.norm(polytope,axis=1), set(subframes), points
     else:
         return alpha/np.linalg.norm(polytope,axis=1)
+
+
+        
+
+
 
 
 def check_injectivity_naive(W, b, iter, distribution="sphere", radius=1, radius_inner=0.1, points=[]):
@@ -291,7 +359,6 @@ def check_injectivity_naive(W, b, iter, distribution="sphere", radius=1, radius_
         bool_injective.append(np.sum(relu(x, W, b) > 0) >= d)
 
     return np.mean(bool_injective)
-
 
 
 
